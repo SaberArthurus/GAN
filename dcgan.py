@@ -5,14 +5,16 @@ import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 import torchvision
 import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
+import torch.nn.init
+from torch.nn.init import kaiming_normal
 
 import os, time
 import itertools
 import pickle
 import argparse
 
-from models import *
-from utils import *
 from torch.autograd import Variable
 import torch.nn.init as init
 
@@ -74,7 +76,7 @@ class discriminator(nn.Module):
         self.conv2_bn = nn.BatchNorm2d(inplanes*2)
         self.conv3 = nn.Conv2d(inplanes*2, inplanes*4, kernel_size=4, stride=2, padding=1)
         self.conv3_bn = nn.BatchNorm2d(inplanes*4)
-        self.conv4 = nn.Conv2d(inplanes*8, kernel_size=4, stride=2, padding=1)
+        self.conv4 = nn.Conv2d(inplanes*4, inplanes*8, kernel_size=4, stride=2, padding=1)
         self.conv4_bn = nn.BatchNorm2d(inplanes*8)
         self.conv5 = nn.Conv2d(inplanes*8, 1, kernel_size=4, stride=1, padding=0)
 
@@ -110,19 +112,14 @@ def main():
             transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
     ])
     train_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('data', train=True, download=True, transform=transform),
-        batch_size=batch_size, shuffle=True)
+        datasets.MNIST('data', train=True, download=True, transform=transform_train),
+        batch_size=args.batch_size, shuffle=True)
 
     transform_test = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
     ])
-    
 
-    trainset = datasets.MNIST('data', train=True, download=True, transform=transform)
-    train_loader = torch.utils.data.DataLoader(
-        trainset,
-        batch_size=args.batch_size, shuffle=True)
 
     # network
     G = generator(128)
@@ -137,12 +134,12 @@ def main():
     D_optimizer = optim.Adam(D.parametsers(), lr=args.lr, betas=(0.5, 0.999))
 
     for epoch in range(args.start_epoch, args.epochs):
-        train(train_loadertrain_loader, 
-            g_model=G, 
+        train(train_loadertrain_loader,
+            g_model=G,
             g_optimizer=G_optimizer,
-            d_model=D, 
-            d_optimizer=d_optimizer, 
-            criterion=criterion, 
+            d_model=D,
+            d_optimizer=d_optimizer,
+            criterion=criterion,
             epoch=epoch)
 
 # Training
@@ -162,7 +159,7 @@ def train(train_loader, g_model, g_optimizer, d_model, d_optimizer, criterion, e
         data_time.update(time.time() - end)
 
         mini_batch = input.size()[0]
-        
+
         yreal = torch.ones(mini_batch)
         yfake = torch.ones(mini_batch)
         input_var, yreal_var, yfake_var = Variable(input.cuda()), Variable(yreal_var.cuda()), Variable(yfake_var.cuda())
@@ -200,5 +197,5 @@ def train(train_loader, g_model, g_optimizer, d_model, d_optimizer, criterion, e
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
-if name == '__main__':
+if __name__ == '__main__':
     main()
