@@ -17,14 +17,14 @@ import argparse
 
 from torch.autograd import Variable
 import torch.nn.init as init
-
+from utils import *
 
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--start-epoch', default=0, type=int)
-parser.add_argument('-b', '--batch-size', default=128, type=int)
+parser.add_argument('-b', '--batch-size', default=10, type=int)
 parser.add_argument('--decay-scale', default=0.1, type=float)
 parser.add_argument('--decay-epoch', default=30, type=int)
 parser.add_argument('--momentum', default=0.9, type=float)
@@ -61,9 +61,9 @@ class generator(nn.Module):
 
     def forward(self, input):
         x = F.relu(self.deconv1_bn(self.deconv1(input)))
-        x = F.relu(self.deconv2_bn(self.deconv2(input)))
-        x = F.relu(self.deconv3_bn(self.deconv3(input)))
-        x = F.relu(self.deconv4_bn(self.deconv4(input)))
+        x = F.relu(self.deconv2_bn(self.deconv2(x)))
+        x = F.relu(self.deconv3_bn(self.deconv3(x)))
+        x = F.relu(self.deconv4_bn(self.deconv4(x)))
         x = F.tanh(self.deconv5(x))
 
         return x
@@ -126,19 +126,20 @@ def main():
     D = discriminator(128)
     G.weight_init()
     D.weight_init()
-    G.cuda()
-    D.cuda()
+    if use_cuda:
+        G.cuda()
+        D.cuda()
 
     criterion = nn.BCELoss()
-    G_optimizer = optim.Adam(G.parametsers(), lr=args.lr, betas=(0.5, 0.999))
-    D_optimizer = optim.Adam(D.parametsers(), lr=args.lr, betas=(0.5, 0.999))
+    G_optimizer = optim.Adam(G.parameters(), lr=args.lr, betas=(0.5, 0.999))
+    D_optimizer = optim.Adam(D.parameters(), lr=args.lr, betas=(0.5, 0.999))
 
     for epoch in range(args.start_epoch, args.epochs):
-        train(train_loadertrain_loader,
+        train(train_loader,
             g_model=G,
             g_optimizer=G_optimizer,
             d_model=D,
-            d_optimizer=d_optimizer,
+            d_optimizer=D_optimizer,
             criterion=criterion,
             epoch=epoch)
 
@@ -150,10 +151,13 @@ def train(train_loader, g_model, g_optimizer, d_model, d_optimizer, criterion, e
     G_losses = AverageMeter()
 
     # switch to train mode
-    model.train()
+    g_model.train()
+    d_model.train()
+    use_cuda = torch.cuda.is_available()
 
     end = time.time()
     for i, (input, _) in enumerate(train_loader):
+        print(i)
         # train discriminator D
         d_model.zero_grad()
         data_time.update(time.time() - end)
@@ -162,15 +166,21 @@ def train(train_loader, g_model, g_optimizer, d_model, d_optimizer, criterion, e
 
         yreal = torch.ones(mini_batch)
         yfake = torch.ones(mini_batch)
-        input_var, yreal_var, yfake_var = Variable(input.cuda()), Variable(yreal_var.cuda()), Variable(yfake_var.cuda())
+        if use_cuda:
+            input_var, yreal_var, yfake_var = Variable(input.cuda()), Variable(yreal.cuda()), Variable(yfake.cuda())
+        else:
+            input_var, yreal_var, yfake_var = Variable(input), Variable(yreal), Variable(yfake)
         d_result = d_model(input_var).squeeze()
         d_real_loss = criterion(d_result, yreal_var)
 
         z = torch.randn((mini_batch, 100)).view(-1, 100, 1, 1)
-        z = Variable(z.cuda())
+        if use_cuda:
+            z = Variable(z.cuda())
+        else:
+            z = Variable(z)
         g_result = g_model(z)
 
-        d_result = d(g_result).squeeze()
+        d_result = d_model(g_result).squeeze()
         d_fake_loss = criterion(d_result, yfake_var)
         d_fake_score = d_result.data.mean()
 
@@ -183,10 +193,14 @@ def train(train_loader, g_model, g_optimizer, d_model, d_optimizer, criterion, e
 
 
         # train generator G
-        G.zero_grad()
+        g_model.zero_grad()
 
         z = torch.randn((mini_batch, 100)).view(-1, 100, 1, 1)
-        z = Variable(z.cuda())
+        if use_cuda:
+            z = Variable(z.cuda())
+        else:
+            z = Variable(z)
+
         g_result = g_model(z)
         d_result = d_model(g_result).squeeze()
         g_train_loss = criterion(d_result, yreal_var)
